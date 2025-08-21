@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GuangNa 240 Marker Palette Assistant</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<!-- ─────────── CSS ─────────── -->
+<style>
+  :root{
+    --bg:#fafafa; --fg:#333; --accent:#555; --border:#686868; --hilite:#1e90ff;
+    --tile-w:50px; --tile-h:70px; --tile-bg:#fff;
+  }
+  /* dark-theme overrides live on the body */
+  body.dark{
+    --bg:#121212; --fg:#e8e8e8; --accent:#bbb; --border:#999; --hilite:#4dabff;
+  }
+
+  body{font-family:system-ui;margin:1rem;background:var(--bg);color:var(--fg)}
+  h1{margin:0 0 1rem;font-size:1.4rem}
+  input,select,button{margin:.3rem;font:inherit}
+  button{cursor:pointer}
+
+  /* controls */
+  #controls{display:flex;flex-wrap:wrap;gap:1rem;margin-bottom:1rem}
+  .panel{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;
+         padding:.4rem .8rem;border:1px solid var(--border);border-radius:.5rem;
+         background:#fff0;backdrop-filter:blur(4px);box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .panel strong{margin-right:.4rem}
+  .or{opacity:.6;font-size:.85rem;margin:0 .2rem;}
+
+  /* layout */
+  #layout{display:flex;gap:1rem}
+  #groupsWrap{flex:1;min-width:0}
+  #basketWrap{width:33%;min-width:300px;max-width:420px;flex-shrink:0;
+              display:flex;flex-direction:column;gap:.5rem}
+
+  /* groups */
+  #groups{display:flex;flex-wrap:wrap;gap:1rem}
+  .group{flex:1 1 240px;display:grid;
+         grid-template-columns:repeat(auto-fill,minmax(var(--tile-w),1fr));
+         gap:.5rem;border:2px outset var(--border);padding:.5rem;min-width:140px;
+         border-radius:.6rem;transition:border-color .2s}
+  .group.dragover{border-color:var(--fg)}
+  #basket{min-height:calc(var(--tile-h)*2 + 1rem)}
+
+  /* tile */
+  .tile{display:flex;flex-direction:column;align-items:center;width:var(--tile-w);height:var(--tile-h);
+        cursor:grab;border:1px solid #666;border-radius:.4rem;user-select:none;
+        background:var(--tile-bg);transition:transform .15s,box-shadow .15s}
+  .tile:hover{transform:translateY(-2px);box-shadow:0 3px 12px rgba(0,0,0,.15)}
+  .tile.sel{outline:2px solid var(--fg)}
+  .swatch{width:100%;height:var(--tile-h);border-radius:.3rem .3rem 0 0}
+  .label{font-weight:700;font-size:.8rem;margin-top:2px}
+  .hex{font-size:.68rem;color:var(--accent)}
+
+  /* toast */
+  .toast{position:fixed;bottom:1rem;right:1rem;
+         background:rgba(51,51,51,.9);color:#fff;padding:.4rem .8rem;
+         border-radius:.4rem;font-size:.8rem;pointer-events:none;
+         opacity:0;animation:toast-fade 1.5s ease-out forwards}
+  @keyframes toast-fade{0%,80%{opacity:1;}100%{opacity:0;}}
+
+  /* modal (contrast / cb-sim) */
+  #modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+         background:rgba(0,0,0,.6);backdrop-filter:blur(2px);z-index:9999}
+  #modalContent{max-width:90%;max-height:80%;overflow:auto;padding:1rem;border-radius:.5rem;
+                background:var(--bg);color:var(--fg);box-shadow:0 4px 18px rgba(0,0,0,.5)}
+  #modalContent h3{margin-top:0}
+</style>
+</head>
+<body>
+
+<h1>GuangNa 240 Acrylic Markers: Swatch-O-Matic
+  <label style="font-size:.85rem;float:right;cursor:pointer">
+    <input type="checkbox" id="darkToggle"> Dark mode
+  </label>
+</h1>
+
+<!-- ─────────── CONTROL BAR ─────────── -->
+<div id="controls">
+  <div class="panel" id="settings">
+    <strong>Groups</strong>
+    <label>Size
+      <select id="gsize"><option>10</option><option>12</option><option>24</option><option selected>240</option></select>
+    </label>
+    <label>Sort
+      <select id="sortby">
+        <option value="hue">Hue</option>
+        <option value="label">Label #</option>
+        <option value="light">Lightness</option>
+        <option value="rand">Random</option>
+        <option value="huesplit">Warm / Cool split</option>
+        <option value="kmeans">K-Means (Lab)</option>
+        <option value="mst">Minimum-spanning tree</option>
+        <option value="maxContrast">Max Contrast</option>
+      </select>
+    </label>
+    <button id="genBtn">Generate</button>
+    <span class="or">or</span>
+    <button id="compBtn" title="Random complementary pairs">Complementary Pairs</button>
+    <button id="triBtn"  title="Random triadic triples">Triadic Triads</button>
+  </div>
+
+  <div class="panel" id="matchPanel">
+    <strong>Match palette</strong>
+    <input type="file" id="imgInput" accept="image/*">
+    <label># Colours
+      <select id="kColors"><option>3</option><option selected>5</option><option>7</option></select>
+    </label>
+    <button id="matchBtn">Find markers</button>
+  </div>
+</div>
+
+<!-- ─────────── WORK AREA ─────────── -->
+<div id="layout">
+  <div id="groupsWrap">
+    <div id="groups"></div>
+  </div>
+
+  <aside id="basketWrap">
+    <h2 style="display:flex;align-items:center;gap:.25rem;flex-wrap:wrap">
+      Basket
+      <button id="contrastBtn" title="Contrast check (AA/AAA)">⚖️</button>
+      <button id="cbBtn"        title="Colour-blindness preview">👁️</button>
+      <button id="basketExportBtn" title="Export basket as PNG">Export PNG</button>
+      <button id="clearBtn"     title="Empty basket">🗑️</button>
+    </h2>
+    <div class="group" id="basket"></div>
+  </aside>
+</div>
+
+<!-- Modal (for contrast & CB sim) -->
+<div id="modal"><div id="modalContent"></div></div>
+
+<!-- ─────────── SCRIPT ─────────── -->
+<script>
+/* ========== 0 · GLOBAL STATE / HELPERS ========== */
+const hexRe = /#?([0-9a-f]{6})/i;
+const hexToRgb = h => [0,2,4].map(i=>parseInt(h.match(hexRe)[1].substr(i,2),16));
+const rgbToHsv = ([r,g,b]) => {r/=255;g/=255;b/=255;const v=Math.max(r,g,b),n=v-Math.min(r,g,b);const h=n===0?0:v===r?(g-b)/n%6:v===g?(b-r)/n+2:(r-g)/n+4;return[(h*60+360)%360,v===0?0:n/v,v]};
+const rgbToXyz = ([r,g,b])=>{r/=255;g/=255;b/=255;[r,g,b]=[r,g,b].map(v=>v>0.04045?((v+0.055)/1.055)**2.4:v/12.92);return[r*41.24+g*35.76+b*18.05,r*21.26+g*71.52+b*7.22,r*1.93+g*11.92+b*95.05]};
+const xyzToLab = ([x,y,z])=>{const ref=[95.047,100,108.883];[x,y,z]=[x/ref[0],y/ref[1],z/ref[2]].map(v=>v>0.008856?Math.cbrt(v):(7.787*v)+16/116);return[(116*y)-16,500*(x-y),200*(y-z)]};
+const rgbToLab = rgb=>xyzToLab(rgbToXyz(rgb));
+const deltaE  =(l1,l2)=>Math.hypot(l1[0]-l2[0],l1[1]-l2[1],l1[2]-l2[2]);
+const lightness=rgb=>{const[r,g,b]=rgb.map(v=>v/255);return .2126*r+.7152*g+.0722*b}
+const hueDiff  =(h1,h2)=>Math.min(Math.abs(h1-h2),360-Math.abs(h1-h2));
+const relLum   =rgb=>{const [R,G,B]=rgb.map(v=>{v/=255;return v<=0.03928?v/12.92:((v+0.055)/1.055)**2.4});return .2126*R+.7152*G+.0722*B}
+const contrast =(rgbA,rgbB)=>{const [L1,L2]=[relLum(rgbA),relLum(rgbB)].sort((a,b)=>b-a);return (L1+0.05)/(L2+0.05)}
+
+function showToast(msg){
+  const t=document.createElement('div'); t.className='toast'; t.textContent=msg;
+  document.body.appendChild(t); t.addEventListener('animationend',()=>t.remove());
+}
+
+/* ========== 1 · LOAD MARKER DATA ========== */
+let MARKERS=[];
+async function loadMarkers(){
+  const raw=await fetch('markers.txt').then(r=>r.text()).catch(()=>{alert('Could not load markers.txt');return ''});
+  MARKERS = raw.trim().split(/\n+/).map(line=>{
+    const[lab,hex]=line.trim().split(/[\s,;:]+/);
+    return {label:lab,hex:hex.startsWith('#')?hex:'#'+hex,labArr:null};
+  }).filter(o=>o.hex&&hexRe.test(o.hex));
+  MARKERS.forEach(m=>m.labArr=rgbToLab(hexToRgb(m.hex)));
+}
+
+/* ========== 2 · UNDO STACK ========== */
+const history=[]; const MAX_HIST=10;
+function snapshot(){
+  const grab=(sel)=>[...document.querySelectorAll(sel)].map(g=>[...g.children].map(t=>t.dataset.key));
+  history.push({groups:grab('#groups .group'), basket:grab('#basket')});
+  if(history.length>MAX_HIST) history.shift();
+}
+function restore(state){
+  const lookup={};
+  [...document.querySelectorAll('.tile')].forEach(t=>lookup[t.dataset.key]=t);
+  state.groups.forEach((arr,i)=>{const g=document.querySelectorAll('#groups .group')[i];g.innerHTML='';arr.forEach(k=>g.appendChild(lookup[k]))});
+  const basket=document.getElementById('basket'); basket.innerHTML='';
+  state.basket.forEach(k=>basket.appendChild(lookup[k]));
+  saveBasket(); // keep localStorage in sync
+}
+/* Ctrl/Cmd+Z handler */
+window.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==='z'&&history.length){ e.preventDefault(); restore(history.pop()); }
+});
+
+/* ========== 3 · TILE FACTORY & DRAG LOGIC ========== */
+const selectedTiles=new Set();
+function clearSel(){selectedTiles.forEach(t=>t.classList.remove('sel'));selectedTiles.clear();}
+
+function createTile(o,uniqueKey){
+  const tile=document.createElement('div');
+  tile.className='tile'; tile.draggable=true; tile.dataset.key=uniqueKey;
+  tile.innerHTML=`<div class='swatch' style='background:${o.hex}'></div>
+                  <div class='label'>${o.label}</div>
+                  <div class='hex'>${o.hex}</div>`;
+  tile.addEventListener('dragstart',e=>{
+    const bundle=[...(selectedTiles.has(tile)&&selectedTiles.size?selectedTiles:[tile])].map(t=>t.dataset.key);
+    e.dataTransfer.setData('text',JSON.stringify(bundle));
+    snapshot();
+  });
+  tile.addEventListener('dragover',e=>e.preventDefault());
+  tile.addEventListener('drop',e=>{
+    e.preventDefault(); e.stopPropagation();
+    const ids=JSON.parse(e.dataTransfer.getData('text'));
+    ids.forEach(k=>tile.parentNode.insertBefore(document.querySelector(`[data-key="${k}"]`),tile));
+    saveBasket();
+  });
+  tile.addEventListener('click',e=>{
+    e.stopPropagation();
+    if(e.ctrlKey||e.metaKey){
+      tile.classList.toggle('sel');
+      selectedTiles[tile.classList.contains('sel')?'add':'delete'](tile);
+    }else{ clearSel(); selectedTiles.add(tile); tile.classList.add('sel'); }
+  });
+  return tile;
+}
+
+/* ========== 4 · GROUP RENDERING ========== */
+function applyGroupListeners(box){
+  box.addEventListener('dragover',e=>{e.preventDefault();box.classList.add('dragover')});
+  box.addEventListener('dragleave',()=>box.classList.remove('dragover'));
+  box.addEventListener('drop',e=>{
+    e.preventDefault();box.classList.remove('dragover');
+    const ids=JSON.parse(e.dataTransfer.getData('text'));
+    ids.forEach(k=>box.appendChild(document.querySelector(`[data-key="${k}"]`)));
+    saveBasket();
+  });
+  // (Removed click-to-select group buckets)
+}
+
+function renderGroups(groups){
+  const wrap=document.getElementById('groups'); wrap.innerHTML='';
+  groups.forEach((grp,gi)=>{
+    const box=document.createElement('div'); box.className='group'; applyGroupListeners(box);
+    grp.forEach((o,i)=>box.appendChild(createTile(o,crypto.randomUUID())));
+    wrap.appendChild(box);
+  });
+}
+
+function sortColours(arr,how){
+  const a=arr.slice();
+  switch(how){
+    case 'label': a.sort((x,y)=>+x.label-+y.label); break;
+    case 'light': a.sort((x,y)=>lightness(hexToRgb(x.hex))-lightness(hexToRgb(y.hex))); break;
+    case 'rand' : a.sort(()=>Math.random()-.5); break;
+    case 'huesplit':{
+      const k=10, buckets=Array.from({length:k},()=>[]);
+      a.forEach(c=>buckets[Math.floor(rgbToHsv(hexToRgb(c.hex))[0]/60)%k].push(c));
+      return buckets.flat();
+    }
+      /* ─── NEW proper k-means ─── */
+    case 'kmeans': {                    // real ΔE-based k-means in Lab
+      const k = 10;
+      let centroids = a.slice().sort(() => Math.random() - .5).slice(0, k).map(c => c.labArr);
+      let buckets = [];
+      for (let iter = 0; iter < 8; iter++) {
+        buckets = Array.from({ length: k }, () => []);
+        a.forEach(col => {  // assign
+          let best = 0, bestD = 1e9;
+          centroids.forEach((cent, idx) => {
+            const d = deltaE(col.labArr, cent);
+            if (d < bestD) { bestD = d; best = idx; }
+          });
+          buckets[best].push(col);
+        });
+        centroids = buckets.map((bucket, i) => {
+          if (!bucket.length) return centroids[i];
+          const sum = bucket.reduce((acc, c) => [acc[0] + c.labArr[0], acc[1] + c.labArr[1], acc[2] + c.labArr[2]],[0,0,0]);
+          return sum.map(v => v / bucket.length);
+        });
+      }
+      return buckets.flat();
+    }
+    case 'mst': {                     // ΔE-Minimum-Spanning-Tree snake
+      const N = a.length;
+      const used   = Array(N).fill(false);
+      const dist   = Array(N).fill(Infinity);
+      const parent = Array(N).fill(-1);
+      dist[0] = 0;
+      for (let step = 0; step < N; step++) { // Prim
+        let v = -1;
+        for (let i = 0; i < N; i++)
+          if (!used[i] && (v === -1 || dist[i] < dist[v])) v = i;
+        used[v] = true;
+        for (let u = 0; u < N; u++) {
+          if (used[u]) continue;
+          const w = deltaE(a[v].labArr, a[u].labArr);
+          if (w < dist[u]) { dist[u] = w; parent[u] = v; }
+        }
+      }
+      const tree = Array.from({ length: N }, () => []);
+      parent.forEach((p, i) => { if (p !== -1) { tree[p].push(i); tree[i].push(p); } });
+      const order = [], seen = Array(N).fill(false), stack = [0];
+      while (stack.length) {
+        const n = stack.pop();
+        if (seen[n]) continue;
+        seen[n] = true;
+        order.push(a[n]);
+        tree[n].forEach(ch => !seen[ch] && stack.push(ch));
+      }
+      return order;
+    }
+    case 'maxContrast':{
+      const remaining = new Set(a);
+      const order = [a[Math.random()*a.length|0]];
+      remaining.delete(order[0]);
+      while(remaining.size){
+        let far=null, best=0;
+        remaining.forEach(c=>{
+          const d = order.reduce((s,o)=>s+deltaE(o.labArr,c.labArr),0);
+          if(d>best){best=d;far=c;}
+        });
+        order.push(far); remaining.delete(far);
+      }
+      return order;
+    }
+    default: a.sort((x,y)=>rgbToHsv(hexToRgb(x.hex))[0]-rgbToHsv(hexToRgb(y.hex))[0]);
+  }
+  return a;
+}
+const makeGroups=(arr,g)=>Array.from({length:Math.ceil(arr.length/g)},(_,i)=>arr.slice(i*g,i*g+g));
+
+function complementaryGroups(col){
+  const out=[],used=new Set();
+  col.forEach((c,i)=>{
+    if(used.has(i))return;
+    const h=rgbToHsv(hexToRgb(c.hex))[0];let best=-1,bd=999;
+    col.forEach((d,j)=>{if(i===j||used.has(j))return;
+      const diff=hueDiff((rgbToHsv(hexToRgb(d.hex))[0]+180)%360,h);
+      if(diff<bd){bd=diff;best=j;}
+    });
+    if(best!==-1){used.add(i);used.add(best);out.push([c,col[best]]);}
+  });
+  return out;
+}
+function triadicGroups(col){
+  const thirds=[[],[],[]];
+  col.forEach(c=>thirds[Math.floor(rgbToHsv(hexToRgb(c.hex))[0]/120)%3].push(c));
+  const len=Math.max(...thirds.map(t=>t.length)), out=[];
+  for(let i=0;i<len;i++){
+    const g=[thirds[0][i],thirds[1][i],thirds[2][i]].filter(Boolean); if(g.length)out.push(g);
+  }
+  return out;
+}
+
+/* ========== 5 · GENERATE / MATCH / EXPORT ========= */
+function generateStandard(){
+  if(!MARKERS.length)return alert('Load failed');
+  renderGroups(makeGroups(sortColours(MARKERS,sortby.value),+gsize.value));
+  snapshot();
+}
+genBtn.onclick=generateStandard;
+compBtn.onclick=()=>{renderGroups(complementaryGroups(sortColours(MARKERS,'rand')));snapshot();}
+triBtn.onclick =()=>{renderGroups(triadicGroups(sortColours(MARKERS,'rand')));snapshot();}
+
+applyGroupListeners(document.getElementById('basket'));
+
+/***** Palette image match (untouched) *****/
+async function getPalette(file,k){return new Promise(res=>{const img=new Image();img.onload=()=>{const cvs=document.createElement('canvas');const ctx=cvs.getContext('2d',{willReadFrequently:true});cvs.width=img.width;cvs.height=img.height;ctx.drawImage(img,0,0);const samples=[];for(let i=0;i<2000;i++){const x=Math.random()*img.width|0,y=Math.random()*img.height|0;const d=ctx.getImageData(x,y,1,1).data;samples.push([d[0],d[1],d[2]]);} // simple k-means
+ let centroids=samples.slice(0,k);for(let iter=0;iter<6;iter++){const buckets=Array.from({length:k},()=>[]);samples.forEach(p=>{let best=0,bd=1e9;centroids.forEach((c,idx)=>{const d=(p[0]-c[0])**2+(p[1]-c[1])**2+(p[2]-c[2])**2;if(d<bd){bd=d;best=idx;}});buckets[best].push(p);});centroids=centroids.map((c,i)=>{if(!buckets[i].length)return c;const m=buckets[i].reduce((a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],[0,0,0]);return[m[0]/buckets[i].length,m[1]/buckets[i].length,m[2]/buckets[i].length];});}
+ res(centroids.map(c=>{return'#'+c.map(v=>Math.round(v).toString(16).padStart(2,'0')).join('').toUpperCase();}));};img.src=URL.createObjectURL(file);});}
+function findNearestMarker(hex){const lab=rgbToLab(hexToRgb(hex));let best=MARKERS[0],bestD=1e9;MARKERS.forEach(m=>{const d=deltaE(lab,m.labArr);if(d<bestD){bestD=d;best=m;}});return{hex,marker:best.label,bestHex:best.hex,diff:bestD};}
+/* ---------- PALETTE → BASKET ---------- */
+async function matchPalette () {
+  const file = imgInput.files[0];
+  if (!file) { alert('Choose an image'); return; }
+  const k        = +kColors.value;
+  const palette  = await getPalette(file, k);
+  const matches  = palette.map(findNearestMarker);
+  const basket   = document.getElementById('basket');
+
+  snapshot();
+  basket.innerHTML = '';
+
+  matches.forEach(m => {
+    const tile = createTile(
+      { label: m.marker, hex: m.bestHex },
+      crypto.randomUUID()
+    );
+    basket.appendChild(tile);
+  });
+
+  saveBasket();
+}
+
+/***** NEW: Export the BASKET as PNG *****/
+function exportBasketPNG(){
+  const tiles=[...document.querySelectorAll('#basket .tile')];
+  if(!tiles.length){ alert('Basket is empty'); return; }
+
+  // Read label/hex from the basket DOM
+  const data = tiles.map(t=>({
+    label: t.querySelector('.label').textContent,
+    hex:   t.querySelector('.hex').textContent
+  }));
+
+  // Layout: near-square grid
+  const n = data.length;
+  const cols = Math.ceil(Math.sqrt(n));
+  const rows = Math.ceil(n / cols);
+
+  // Drawing metrics
+  const tileW=90, tileH=60, labelH=18, gap=12, pad=12;
+  const W = pad*2 + cols*tileW + (cols-1)*gap;
+  const H = pad*2 + rows*(tileH+labelH) + (rows-1)*gap;
+
+  const cvs=document.createElement('canvas');
+  cvs.width=W; cvs.height=H;
+  const ctx=cvs.getContext('2d');
+
+  // background
+  ctx.fillStyle='#ffffff';
+  ctx.fillRect(0,0,W,H);
+
+  ctx.font='14px system-ui';
+  ctx.textAlign='center';
+  ctx.textBaseline='top';
+  ctx.fillStyle='#000';
+
+  data.forEach((o,i)=>{
+    const c = i % cols, r = Math.floor(i/cols);
+    const x = pad + c*(tileW+gap);
+    const y = pad + r*(tileH+labelH+gap);
+
+    // swatch
+    ctx.fillStyle=o.hex;
+    ctx.fillRect(x,y,tileW,tileH);
+
+    // label (below swatch)
+    ctx.fillStyle='#000';
+    ctx.fillText(o.label, x+tileW/2, y+tileH+2);
+  });
+
+  const link=document.createElement('a');
+  link.download='basket.png';
+  link.href=cvs.toDataURL('image/png');
+  link.click();
+}
+
+document.getElementById('basketExportBtn').onclick = exportBasketPNG;
+document.getElementById('matchBtn').onclick       = matchPalette;
+
+/* ========== 6 · BASKET PERSISTENCE ========== */
+function updateBasketUI(){
+  const disabled = !basket.children.length;
+  contrastBtn.disabled = disabled;
+  cbBtn.disabled       = disabled;
+  basketExportBtn.disabled = disabled;
+  clearBtn.disabled    = disabled;
+}
+function saveBasket(){
+  const ids=[...basket.children].map(t=>t.dataset.key);
+  localStorage.setItem('basket',JSON.stringify(ids));
+  updateBasketUI();
+}
+function restoreBasket(){
+  const saved=JSON.parse(localStorage.getItem('basket')||'[]');
+  const lookup={};
+  [...document.querySelectorAll('.tile')].forEach(t=>lookup[t.dataset.key]=t);
+  saved.forEach(k=>lookup[k]&&basket.appendChild(lookup[k]));
+  updateBasketUI();
+}
+clearBtn.onclick=()=>{snapshot();basket.innerHTML='';saveBasket();}
+window.addEventListener('beforeunload',saveBasket);
+
+/* ========== 7 · CONTRAST & COLOUR-BLINDNESS TOOLS ========== */
+const modal=document.getElementById('modal'), modalContent=document.getElementById('modalContent');
+modal.addEventListener('click',e=>{if(e.target===modal)modal.style.display='none'});
+
+contrastBtn.onclick=()=>{
+  const tiles=[...basket.children];
+  if(tiles.length<2)return alert('Need at least 2 swatches in basket');
+  let html='<h3>Contrast matrix (WCAG)</h3><table><tr><th></th>';
+  tiles.forEach(t=>html+=`<th>${t.querySelector('.label').textContent}</th>`); html+='</tr>';
+  tiles.forEach((a,i)=>{
+    html+='<tr><th>'+a.querySelector('.label').textContent+'</th>';
+    const rgbA=hexToRgb(a.querySelector('.hex').textContent);
+    tiles.forEach((b,j)=>{
+      if(i===j){html+='<td style="background:#444"></td>';return;}
+      const c=contrast(rgbA,hexToRgb(b.querySelector('.hex').textContent));
+      const passAA=c>=4.5, passAAA=c>=7;
+      html+=`<td title="${c.toFixed(2)}"><span style="opacity:${passAA?1:0.4}">${passAAA?'AAA':'AA'}</span></td>`;
+    });
+    html+='</tr>';
+  });
+  html+='</table><p>(Grey boxes are same-colour comparisons.)</p>';
+  modalContent.innerHTML=html; modal.style.display='flex';
+};
+
+function simulateDeuteranopia([r,g,b]){
+  // Brettel 1997-ish quick sim (good enough for preview)
+  const l=0.299*r+0.587*g+0.114*b;
+  return [l,l,b];
+}
+cbBtn.onclick=()=>{
+  const samples=[...basket.children];
+  if(!samples.length)return alert('Basket empty');
+  let html='<h3>Deuteranopia preview</h3><div style="display:flex;flex-wrap:wrap;gap:1rem">';
+  samples.forEach(t=>{
+    const hex=t.querySelector('.hex').textContent;
+    const rgb=hexToRgb(hex);
+    const sim=simulateDeuteranopia(rgb).map(v=>v|0).map(v=>v.toString(16).padStart(2,'0')).join('');
+    html+=`<div style="text-align:center">
+             <div style="width:40px;height:40px;border:1px solid #000;background:${hex}"></div>
+             <div style="width:40px;height:40px;border:1px solid #000;background:#${sim}"></div>
+             <small>${t.querySelector('.label').textContent}</small>
+           </div>`;
+  });
+  html+='</div><p>Top = normal vision, bottom = simulated.</p>';
+  modalContent.innerHTML=html; modal.style.display='flex';
+};
+
+/* ========== 8 · DARK-MODE TOGGLE ========== */
+function applyTheme(pref){
+  document.body.classList.toggle('dark',pref==='dark');
+}
+const storedTheme=localStorage.getItem('theme');
+applyTheme(storedTheme|| (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'));
+darkToggle.checked=document.body.classList.contains('dark');
+darkToggle.onchange=()=>{const t=darkToggle.checked?'dark':'light';localStorage.setItem('theme',t);applyTheme(t)};
+
+/* ========== 9 · INIT ========== */
+(async()=>{
+  await loadMarkers();
+  generateStandard();
+  restoreBasket();
+})();
+</script>
+</body>
+</html>
