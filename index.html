@@ -9,11 +9,11 @@
 <style>
   :root{
     --bg:#fafafa; --fg:#333; --accent:#555; --border:#686868; --hilite:#1e90ff;
-    --tile-w:50px; --tile-h:70px; --tile-bg:#fff;
+    --tile-w:50px; --tile-h:70px; --tile-bg:#fff; --panel-bg:#e2e2e2;
   }
   /* dark-theme overrides live on the body */
   body.dark{
-    --bg:#121212; --fg:#e8e8e8; --accent:#bbb; --border:#999; --hilite:#4dabff;
+    --bg:#121212; --fg:#e8e8e8; --accent:#bbb; --border:#999; --hilite:#4dabff; --tile-bg:#121212; --panel-bg:#252525;
   }
 
   body{font-family:system-ui;margin:1rem;background:var(--bg);color:var(--fg)}
@@ -24,8 +24,8 @@
   /* controls */
   #controls{display:flex;flex-wrap:wrap;gap:1rem;margin-bottom:1rem}
   .panel{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;
-         padding:.4rem .8rem;border:1px solid var(--border);border-radius:.5rem;
-         background:#fff0;backdrop-filter:blur(4px);box-shadow:0 1px 3px rgba(0,0,0,.05)}
+         padding:.6rem .8rem;border:2px solid var(--border);
+         background:var(--panel-bg);backdrop-filter:blur(4px);box-shadow:0 1px 3px rgba(0,0,0,.05)}
   .panel strong{margin-right:.4rem}
   .or{opacity:.6;font-size:.85rem;margin:0 .2rem;}
 
@@ -39,7 +39,7 @@
   #groups{display:flex;flex-wrap:wrap;gap:1rem}
   .group{flex:1 1 240px;display:grid;
          grid-template-columns:repeat(auto-fill,minmax(var(--tile-w),1fr));
-         gap:.5rem;border:2px outset var(--border);padding:.5rem;min-width:140px;
+         gap:.5rem;border:2px solid var(--border);padding:.5rem;min-width:140px;
          border-radius:.6rem;transition:border-color .2s}
   .group.dragover{border-color:var(--fg)}
   #basket{min-height:calc(var(--tile-h)*2 + 1rem)}
@@ -67,10 +67,114 @@
   #modalContent{max-width:90%;max-height:80%;overflow:auto;padding:1rem;border-radius:.5rem;
                 background:var(--bg);color:var(--fg);box-shadow:0 4px 18px rgba(0,0,0,.5)}
   #modalContent h3{margin-top:0}
+  
+  /* buttons */
+  button {
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    margin: 4px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+  }
+
+  button:hover {transform: translateY(-2px);}
+
+  button:active {transform: translateY(0);}
+  
+  /* Primary */
+  button.primary {
+    background-color: #8e7584;
+  }
+  button.primary:hover {
+    background-color: #855572;
+  }
+  button.primary:active {
+    background-color: #773e60;
+  }
+
+  /* Gen */
+  button.gen {
+    background-color: #773e60;
+  }
+  button.danger:hover {
+    background-color: #602a4a;
+  }
+  button.danger:active {
+    background-color: #491835;
+  }
+
+  /* basket */
+  button.basket {
+    background-color: #6a9b7f;
+  }
+  button.basket:hover {
+    background-color: #55886b;
+  }
+  button.basket:active {
+    background-color: #417f5c;
+  }
+
+  /* file upload */
+  .file-upload {
+    display: none; /* hide the ugly native input */
+  }
+
+  .file-label {
+    background-color: #8e7584;
+    color: white;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+  }
+
+  .file-label:hover {
+    background-color: #855572;
+    transform: translateY(-2px);
+  }
+
+  .file-label:active {
+    background-color: #773e60;
+    transform: translateY(0);
+  }
+
+  /* select dropdown */
+  select {
+  appearance: none;          /* removes native OS styles */
+  -webkit-appearance: none;  /* Safari/Chrome */
+  -moz-appearance: none;     /* Firefox */
+
+  background-color: #ffffff; /* white background */
+  background: #fff url("data:image/svg+xml;utf8,<svg fill='black' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>") no-repeat right 8px center;
+  background-size: 16px;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 30px 6px 10px; /* extra right padding for arrow */
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+select:hover {
+  border-color: #888;
+}
+
+select:focus {
+  border-color: #4CAF50; /* highlight when active */
+  box-shadow: 0 0 3px rgba(76, 175, 80, 0.6);
+}
 </style>
 </head>
-<body>
 
+
+<body>
 <h1>GuangNa 240 Acrylic Markers: Swatch-O-Matic
   <label style="font-size:.85rem;float:right;cursor:pointer">
     <input type="checkbox" id="darkToggle"> Dark mode
@@ -80,7 +184,10 @@
 <!-- ─────────── CONTROL BAR ─────────── -->
 <div id="controls">
   <div class="panel" id="settings">
-    <strong>Groups</strong>
+    <strong>Grouping</strong>
+    <button id="compBtn" class="primary" title="Random complementary pairs">Complementary Pairs</button>
+    <button id="triBtn"  class="primary" title="Random triadic triples">Triadic Triads</button>
+    <span class="or">OR</span>
     <label>Size
       <select id="gsize"><option>10</option><option>12</option><option>24</option><option selected>240</option></select>
     </label>
@@ -96,19 +203,17 @@
         <option value="maxContrast">Max Contrast</option>
       </select>
     </label>
-    <button id="genBtn">Generate</button>
-    <span class="or">or</span>
-    <button id="compBtn" title="Random complementary pairs">Complementary Pairs</button>
-    <button id="triBtn"  title="Random triadic triples">Triadic Triads</button>
+    <button id="genBtn" class="gen">Generate</button>
   </div>
 
   <div class="panel" id="matchPanel">
     <strong>Match palette</strong>
-    <input type="file" id="imgInput" accept="image/*">
+    <label for="imgInput" class="file-label">Upload Image</label>
+    <input type="file" id="imgInput" class="file-upload" accept="image/*">
     <label># Colours
       <select id="kColors"><option>3</option><option selected>5</option><option>7</option></select>
     </label>
-    <button id="matchBtn">Find markers</button>
+    <button id="matchBtn" class="gen">Find markers</button>
   </div>
 </div>
 
@@ -121,10 +226,10 @@
   <aside id="basketWrap">
     <h2 style="display:flex;align-items:center;gap:.25rem;flex-wrap:wrap">
       Basket
-      <button id="contrastBtn" title="Contrast check (AA/AAA)">⚖️</button>
-      <button id="cbBtn"        title="Colour-blindness preview">👁️</button>
-      <button id="basketExportBtn" title="Export basket as PNG">Export PNG</button>
-      <button id="clearBtn"     title="Empty basket">🗑️</button>
+      <button id="contrastBtn" class="basket" title="Contrast check (AA/AAA)">🌓</button>
+      <button id="cbBtn" class="basket" title="Colour-blindness preview">👁️</button>
+      <button id="clearBtn" class="basket" title="Empty basket">❌</button>
+      <button id="basketExportBtn" class="basket" title="Export basket as PNG">Export PNG</button>
     </h2>
     <div class="group" id="basket"></div>
   </aside>
@@ -356,7 +461,7 @@ triBtn.onclick =()=>{renderGroups(triadicGroups(sortColours(MARKERS,'rand')));sn
 
 applyGroupListeners(document.getElementById('basket'));
 
-/***** Palette image match (untouched) *****/
+/***** Palette image match *****/
 async function getPalette(file,k){return new Promise(res=>{const img=new Image();img.onload=()=>{const cvs=document.createElement('canvas');const ctx=cvs.getContext('2d',{willReadFrequently:true});cvs.width=img.width;cvs.height=img.height;ctx.drawImage(img,0,0);const samples=[];for(let i=0;i<2000;i++){const x=Math.random()*img.width|0,y=Math.random()*img.height|0;const d=ctx.getImageData(x,y,1,1).data;samples.push([d[0],d[1],d[2]]);} // simple k-means
  let centroids=samples.slice(0,k);for(let iter=0;iter<6;iter++){const buckets=Array.from({length:k},()=>[]);samples.forEach(p=>{let best=0,bd=1e9;centroids.forEach((c,idx)=>{const d=(p[0]-c[0])**2+(p[1]-c[1])**2+(p[2]-c[2])**2;if(d<bd){bd=d;best=idx;}});buckets[best].push(p);});centroids=centroids.map((c,i)=>{if(!buckets[i].length)return c;const m=buckets[i].reduce((a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],[0,0,0]);return[m[0]/buckets[i].length,m[1]/buckets[i].length,m[2]/buckets[i].length];});}
  res(centroids.map(c=>{return'#'+c.map(v=>Math.round(v).toString(16).padStart(2,'0')).join('').toUpperCase();}));};img.src=URL.createObjectURL(file);});}
